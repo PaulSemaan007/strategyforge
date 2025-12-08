@@ -213,26 +213,56 @@ def evaluate(
     console.print(f"\n[yellow]Running benchmark:[/yellow] {benchmark}")
     console.print(f"[yellow]Model:[/yellow] {model}")
 
-    # TODO: Implement evaluation framework (Phase 3)
-    console.print("\n[dim]Evaluation framework coming in Phase 3...[/dim]")
+    try:
+        from .evaluation.runner import EvaluationRunner, save_report
+        from .evaluation.benchmarks import list_benchmarks
 
-    table = Table(title="Evaluation Metrics (Preview)")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Score", justify="right")
-    table.add_column("Status", justify="center")
+        # Show available benchmarks
+        console.print("\n[dim]Available benchmarks:[/dim]")
+        for b in list_benchmarks():
+            console.print(f"  - {b['name']}: {b['num_cases']} cases")
 
-    metrics = [
-        ("Geospatial Accuracy", "—", "[dim]Pending[/dim]"),
-        ("Strategic Coherence", "—", "[dim]Pending[/dim]"),
-        ("Resource Awareness", "—", "[dim]Pending[/dim]"),
-        ("Adversarial Reasoning", "—", "[dim]Pending[/dim]"),
-        ("Risk Calibration", "—", "[dim]Pending[/dim]"),
-    ]
+        console.print(f"\n[bold]Starting evaluation...[/bold]\n")
 
-    for metric, score, status in metrics:
-        table.add_row(metric, score, status)
+        # Run benchmark
+        runner = EvaluationRunner(model_name=model, verbose=True)
+        report = runner.run_benchmark(benchmark)
 
-    console.print(table)
+        # Display results
+        console.print("\n")
+        console.print(Panel(
+            report.summary(),
+            title="[bold green]Evaluation Results[/bold green]",
+            border_style="green"
+        ))
+
+        # Category breakdown table
+        table = Table(title="Category Scores")
+        table.add_column("Category", style="cyan")
+        table.add_column("Score", justify="right")
+        table.add_column("Grade", justify="center")
+
+        for cat, score in report.category_scores.items():
+            pct = score * 100
+            grade = "A" if pct >= 90 else "B" if pct >= 80 else "C" if pct >= 70 else "D" if pct >= 60 else "F"
+            color = "green" if pct >= 80 else "yellow" if pct >= 60 else "red"
+            table.add_row(cat.capitalize(), f"[{color}]{pct:.1f}%[/{color}]", grade)
+
+        console.print(table)
+
+        # Save if output specified
+        if output:
+            save_report(report, output)
+            console.print(f"\n[green]Report saved to:[/green] {output}")
+
+    except ImportError as e:
+        console.print(f"[red]Missing dependency:[/red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        import traceback
+        traceback.print_exc()
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -327,6 +357,11 @@ def main():
     and evaluation tooling for military decision-making scenarios.
     """
     pass
+
+
+# Register map command from separate module
+from .cli_map import map_command
+app.command(name="map")(map_command)
 
 
 if __name__ == "__main__":

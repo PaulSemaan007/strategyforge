@@ -9,7 +9,15 @@ the effectiveness of LLMs applied to military decision-making:
 - Adversarial reasoning assessment
 """
 
-from .metrics import EvaluationMetrics
+from .metrics import EvaluationReport, MetricResult, evaluate_response
 from .runner import EvaluationRunner
+from .benchmarks import get_benchmark, list_benchmarks
 
-__all__ = ["EvaluationMetrics", "EvaluationRunner"]
+__all__ = [
+    "EvaluationReport",
+    "MetricResult", 
+    "EvaluationRunner",
+    "evaluate_response",
+    "get_benchmark",
+    "list_benchmarks"
+]
