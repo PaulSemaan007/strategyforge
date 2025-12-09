@@ -53,6 +53,7 @@ results/
 *.json
 !data/scenarios/*.json
 !data/geojson/*.json
+!vercel.json
 
 # OS
 .DS_Store
