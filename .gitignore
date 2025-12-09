@@ -54,6 +54,8 @@ results/
 !data/scenarios/*.json
 !data/geojson/*.json
 !vercel.json
+!web/package.json
+!web/tsconfig.json
 
 # OS
 .DS_Store
