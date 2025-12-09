@@ -338,7 +338,7 @@ def api(
     try:
         import uvicorn
         uvicorn.run(
-            "strategyforge.src.api.main:app",
+            "strategyforge.api.main:app",
             host=host,
             port=port,
             reload=reload

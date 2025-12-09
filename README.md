@@ -6,7 +6,19 @@ A LangGraph-powered simulation platform where LLM agents act as military command
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-green.svg)
+![Next.js](https://img.shields.io/badge/Next.js-14+-black.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+---
+
+## Demo
+
+<p align="center">
+  <img src="docs/dashboard.png" alt="Dashboard" width="45%">
+  <img src="docs/map.png" alt="Tactical Map" width="45%">
+</p>
+
+**Live Demo**: [strategyforge.vercel.app](https://strategyforge.vercel.app) *(coming soon)*
 
 ---
 
@@ -16,23 +28,35 @@ StrategyForge is a research platform exploring how Large Language Models can sup
 
 - **Multi-Agent Architecture**: Blue Force, Red Force, and Analyst agents in a turn-based simulation
 - **Geospatial Reasoning**: Agents calculate distances, analyze terrain, and reason about geography
-- **Evaluation Framework**: Metrics to measure LLM effectiveness in strategic decision-making
-- **Realistic Scenarios**: Indo-Pacific and European theater configurations
+- **Evaluation Framework**: Comprehensive metrics to measure LLM effectiveness in strategic decision-making
+- **Interactive Web UI**: Real-time visualization with tactical maps and evaluation dashboards
+- **Realistic Scenarios**: Indo-Pacific theater configurations with 17+ military units
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    LANGGRAPH AGENT SYSTEM                        │
+│                      STRATEGYFORGE SYSTEM                        │
 │                                                                  │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│   │ BLUE FORCE  │    │ RED FORCE   │    │ ANALYST     │         │
-│   │ Commander   │◄──►│ Commander   │◄──►│ Agent       │         │
-│   └─────────────┘    └─────────────┘    └─────────────┘         │
-│          │                  │                  │                 │
-│          └──────────────────┼──────────────────┘                 │
-│                             ▼                                    │
-│                    ┌─────────────────┐                          │
-│                    │ GEOSPATIAL      │                          │
-│                    │ REASONING TOOLS │                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │ Interactive  │  │ Agent Chat   │  │ Evaluation Dashboard │   │
+│  │ Map (Leaflet)│  │ Logs Panel   │  │ (Metrics & Charts)   │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+│                              │                                   │
+│                    ┌─────────▼─────────┐                        │
+│                    │   FastAPI Backend │                        │
+│                    └─────────┬─────────┘                        │
+│                              │                                   │
+│   ┌─────────────┐    ┌──────▼──────┐    ┌─────────────┐        │
+│   │ BLUE FORCE  │    │ LANGGRAPH   │    │ RED FORCE   │        │
+│   │ Commander   │◄──►│ Agent Graph │◄──►│ Commander   │        │
+│   └─────────────┘    └──────┬──────┘    └─────────────┘        │
+│                             │                                    │
+│                    ┌────────▼────────┐                          │
+│                    │ ANALYST AGENT   │                          │
+│                    │ + Evaluation    │                          │
+│                    └─────────────────┘                          │
+│                             │                                    │
+│                    ┌────────▼────────┐                          │
+│                    │ Ollama (Llama)  │                          │
 │                    └─────────────────┘                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -44,6 +68,7 @@ StrategyForge is a research platform exploring how Large Language Models can sup
 ### Prerequisites
 
 - Python 3.11+
+- Node.js 18+ (for web UI)
 - [Ollama](https://ollama.ai/) with `llama3.1:8b` model
 
 ### Installation
@@ -64,7 +89,7 @@ pip install -r requirements.txt
 ollama pull llama3.1:8b
 ```
 
-### Run a Simulation
+### Run a Simulation (CLI)
 
 ```bash
 # Run the Taiwan Strait scenario
@@ -77,13 +102,143 @@ python -m strategyforge run -s taiwan_strait -t 3 --verbose
 python -m strategyforge run -s taiwan_strait -o results.json
 ```
 
+### Run Evaluation Benchmarks
+
+```bash
+# Quick benchmark (3 test cases)
+python -m strategyforge evaluate --benchmark quick
+
+# Full evaluation suite (10 test cases)
+python -m strategyforge evaluate --benchmark full
+
+# Category-specific benchmarks
+python -m strategyforge evaluate --benchmark geospatial
+python -m strategyforge evaluate --benchmark strategic
+python -m strategyforge evaluate --benchmark adversarial
+```
+
+### Generate Tactical Map
+
+```bash
+# Generate interactive HTML map
+python -m strategyforge map --scenario taiwan_strait --output map.html
+```
+
+### Run the Web UI
+
+```bash
+# Start the FastAPI backend
+python -m strategyforge api --port 8000
+
+# In a new terminal, start the Next.js frontend
+cd web
+npm install
+npm run dev
+
+# Open http://localhost:3000
+```
+
 ---
 
-## Architecture
+## Evaluation Framework
+
+The evaluation system measures LLM performance across three critical domains:
+
+### Metrics Categories
+
+| Category | Metrics | What It Measures |
+|----------|---------|------------------|
+| **Geospatial** | Distance Accuracy, Grid Reference Usage, Terrain Awareness | Can the LLM correctly reason about geography? |
+| **Strategic** | Objective Alignment, Reasoning Structure, Decision Consistency | Are decisions logically sound? |
+| **Adversarial** | Opponent Modeling, Multi-Step Planning | Can the LLM anticipate enemy actions? |
+
+### Benchmark Results (Llama 3.1 8B)
+
+```
+=== Evaluation Report ===
+Model: llama3.1:8b
+Benchmark: quick
+
+Overall Score: 54.2%
+
+Category Breakdown:
+  Geospatial: 51.1%
+  Strategic: 65.6%
+  Adversarial: 41.7%
+
+Individual Metrics:
+  [F] Distance Accuracy: 50.0%
+  [F] Grid Reference Usage: 30.0%
+  [C] Terrain Awareness: 73.3%
+  [F] Objective Alignment: 50.0%
+  [C] Reasoning Structure: 75.0%
+  [C] Decision Consistency: 72.0%
+  [F] Opponent Modeling: 50.0%
+  [F] Multi-Step Planning: 33.3%
+```
+
+### Benchmark Test Cases
+
+The system includes 10 benchmark test cases:
+
+**Geospatial (4 cases)**
+- Taiwan Strait Width calculation
+- Fighter Intercept Range planning
+- Terrain Advantage Assessment
+- Multi-Asset Coordination timing
+
+**Strategic (3 cases)**
+- Objective Prioritization
+- Risk Assessment
+- Resource Allocation
+
+**Adversarial (3 cases)**
+- Opponent Prediction
+- Counter-Move Planning
+- Deception Recognition
+
+---
+
+## Project Structure
+
+```
+strategyforge/
+├── strategyforge/
+│   ├── agents/           # LangGraph agent system
+│   │   ├── graph.py      # Main agent graph
+│   │   ├── prompts.py    # Agent prompt engineering
+│   │   └── state.py      # Game state management
+│   ├── scenarios/        # Wargame scenarios
+│   │   ├── base.py       # Scenario base classes
+│   │   └── taiwan_strait.py
+│   ├── evaluation/       # LLM evaluation framework
+│   │   ├── metrics.py    # Evaluation metrics
+│   │   ├── benchmarks.py # Test suites
+│   │   └── runner.py     # Benchmark runner
+│   ├── geo/              # Geospatial utilities
+│   │   ├── distance.py   # Haversine calculations
+│   │   ├── terrain.py    # Terrain analysis
+│   │   └── visualization.py  # Folium maps
+│   └── api/              # FastAPI backend
+│       └── main.py       # REST API endpoints
+├── web/                  # Next.js frontend
+│   ├── app/              # App router pages
+│   │   ├── page.tsx      # Dashboard
+│   │   ├── map/          # Tactical map
+│   │   ├── evaluation/   # Eval results
+│   │   └── simulation/   # Simulation viewer
+│   └── components/       # React components
+├── tests/                # Test suite
+└── requirements.txt
+```
+
+---
+
+## Key Components
 
 ### Agent System
 
-The simulation uses three specialized agents:
+The simulation uses three specialized agents orchestrated by LangGraph:
 
 | Agent | Role | Perspective |
 |-------|------|-------------|
@@ -101,43 +256,7 @@ Turn N:
   4. State updates → Turn N+1
 ```
 
-### Evaluation Metrics
-
-| Metric | Description |
-|--------|-------------|
-| **Geospatial Accuracy** | Correctness of distance/terrain calculations |
-| **Strategic Coherence** | Logical consistency of decisions |
-| **Resource Awareness** | Tracking of logistics and supplies |
-| **Adversarial Reasoning** | Anticipation of opponent moves |
-| **Risk Calibration** | Proportionate risk-taking |
-
----
-
-## Project Structure
-
-```
-strategyforge/
-├── src/
-│   ├── agents/           # LangGraph agent system
-│   │   ├── graph.py      # Main agent graph
-│   │   ├── prompts.py    # Agent prompt engineering
-│   │   └── state.py      # Game state management
-│   ├── scenarios/        # Wargame scenarios
-│   │   ├── base.py       # Scenario base classes
-│   │   └── taiwan_strait.py
-│   ├── evaluation/       # LLM evaluation framework
-│   ├── geo/              # Geospatial utilities
-│   └── api/              # FastAPI backend
-├── frontend/             # Next.js UI (Vercel-ready)
-├── data/                 # GeoJSON and scenario data
-└── tests/                # Test suite
-```
-
----
-
-## Key Components
-
-### Prompt Engineering (`src/agents/prompts.py`)
+### Prompt Engineering
 
 Demonstrates structured prompting for military decision-making:
 
@@ -161,72 +280,81 @@ Structure your responses as:
 """
 ```
 
-### Scenario System (`src/scenarios/`)
-
-Realistic military scenarios with:
-- Unit positions and capabilities
-- Strategic objectives
-- Terrain data
-- Force composition
-
-### Agent Graph (`src/agents/graph.py`)
-
-LangGraph-based state machine:
-- Turn-based execution
-- State persistence
-- Conditional routing
-- Streaming output
-
 ---
 
 ## Scenarios
 
 ### Taiwan Strait Crisis
 
-Indo-Pacific scenario testing:
+Indo-Pacific scenario featuring:
 - Maritime chokepoint control
-- Multi-domain operations (air, naval, ground)
-- Distance calculations across 180km strait
+- Multi-domain operations (air, naval, coastal)
+- Distance calculations across 130km strait
 - Asymmetric force considerations
 
-**Blue Force**: 8 units (air, naval, coastal defense)
-**Red Force**: 9 units (carrier group, amphibious, missile)
+**Blue Force (8 units)**
+- 2x Fighter Squadrons (F-16)
+- 2x Destroyer Groups
+- 1x Submarine
+- 2x Coastal Defense Batteries
+- 1x Headquarters
 
----
-
-## Evaluation Framework
-
-*(Phase 3 - In Progress)*
-
-The evaluation system measures LLM performance on:
-
-1. **Geospatial Benchmarks**
-   - Distance calculation accuracy
-   - Terrain understanding
-   - Position reasoning
-
-2. **Strategic Benchmarks**
-   - Decision consistency
-   - Objective alignment
-   - Resource management
-
-3. **Adversarial Benchmarks**
-   - Opponent modeling
-   - Counter-move prediction
-   - Deception detection
+**Red Force (9 units)**
+- 1x Carrier Strike Group
+- 2x Destroyer Groups
+- 2x Submarines
+- 1x Amphibious Group
+- 1x Bomber Squadron
+- 1x Missile Battery
+- 1x Headquarters
 
 ---
 
 ## Technology Stack
 
-| Component | Technology |
-|-----------|------------|
-| Agent Framework | LangGraph |
-| LLM Backend | Ollama (Llama 3.1) |
-| Geospatial | GeoPandas, Folium |
-| API | FastAPI |
-| Frontend | Next.js (Vercel) |
-| CLI | Typer + Rich |
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Agent Framework | LangGraph | Multi-agent orchestration |
+| LLM Backend | Ollama (Llama 3.1) | Local inference |
+| Geospatial | Folium, Haversine | Map visualization, distance calc |
+| API | FastAPI | REST endpoints |
+| Frontend | Next.js 14, Tailwind | Web UI |
+| Maps | Leaflet, react-leaflet | Interactive tactical maps |
+| Charts | Recharts | Evaluation visualizations |
+| CLI | Typer + Rich | Terminal interface |
+
+---
+
+## API Endpoints
+
+```
+GET  /api/scenarios          # List available scenarios
+GET  /api/scenarios/:id      # Get scenario details
+GET  /api/map/:scenario      # Get map GeoJSON data
+GET  /api/benchmarks         # List benchmarks
+GET  /api/benchmarks/:name   # Get benchmark details
+POST /api/evaluate           # Run evaluation (async)
+GET  /api/evaluate/:job_id   # Get evaluation status
+GET  /api/metrics            # Get metric definitions
+GET  /api/demo/evaluation    # Demo evaluation data
+```
+
+---
+
+## Deployment
+
+### Vercel (Frontend)
+
+```bash
+cd web
+vercel --prod
+```
+
+### Docker (Full Stack)
+
+```bash
+docker-compose up -d
+```
 
 ---
 
@@ -237,22 +365,26 @@ The evaluation system measures LLM performance on:
 pytest tests/
 
 # Format code
-black src/
-ruff check src/
+black strategyforge/
+ruff check strategyforge/
 
-# Run API server
+# Run API server with hot reload
 python -m strategyforge api --reload
+
+# Run frontend dev server
+cd web && npm run dev
 ```
 
 ---
 
 ## Roadmap
 
-- [x] Phase 1: Core agent system
-- [x] Phase 2: Geospatial integration
-- [ ] Phase 3: Evaluation framework
-- [ ] Phase 4: Web UI (Next.js)
-- [ ] Phase 5: Additional scenarios
+- [x] Phase 1: Core agent system (LangGraph)
+- [x] Phase 2: Geospatial integration (Folium, terrain)
+- [x] Phase 3: Evaluation framework (10 benchmarks)
+- [x] Phase 4: Web UI (Next.js, Leaflet)
+- [ ] Phase 5: Additional scenarios (Eastern Europe)
+- [ ] Phase 6: Model comparison (GPT-4, Claude)
 
 ---
 
@@ -282,4 +414,4 @@ Inspired by research into AI applications for military planning and wargaming, i
 
 ---
 
-*Built as a demonstration of LLM agent architecture, geospatial AI, and evaluation tooling.*
+*Built as a demonstration of LLM agent architecture, geospatial AI, and evaluation tooling for the Anduril Thunderforge team.*
