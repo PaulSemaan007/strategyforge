@@ -7,6 +7,18 @@ Provides tools that agents can use during simulation:
 - Resource tools (logistics, supply tracking)
 """
 
-from .geospatial import GeospatialTools
+from .geospatial import (
+    GEOSPATIAL_TOOLS,
+    get_distance,
+    check_weapon_range,
+    analyze_terrain,
+    estimate_force_transit,
+)
 
-__all__ = ["GeospatialTools"]
+__all__ = [
+    "GEOSPATIAL_TOOLS",
+    "get_distance",
+    "check_weapon_range",
+    "analyze_terrain",
+    "estimate_force_transit",
+]
