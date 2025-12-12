@@ -59,6 +59,7 @@ class GameState(TypedDict):
     # Simulation metadata
     scenario_name: str
     turn_number: int
+    max_turns: int
     phase: Literal["blue_planning", "red_planning", "analysis", "resolution"]
 
     # Message history (LangGraph managed)
@@ -89,12 +90,14 @@ def create_initial_state(
     blue_units: list[Unit],
     red_units: list[Unit],
     objectives: dict,
-    terrain_data: dict = None
+    terrain_data: dict = None,
+    max_turns: int = 5
 ) -> GameState:
     """Create the initial game state for a new simulation."""
     return GameState(
         scenario_name=scenario_name,
         turn_number=1,
+        max_turns=max_turns,
         phase="blue_planning",
         messages=[],
         blue_units=blue_units,
@@ -104,6 +107,85 @@ def create_initial_state(
         red_scores=[],
         objectives=objectives,
         terrain_data=terrain_data or {},
+        is_complete=False,
+        winner=None
+    )
+
+
+def create_state_from_scenario(scenario, max_turns: int = 5) -> GameState:
+    """
+    Create a GameState from a Scenario object.
+
+    This bridges the scenario data models with the LangGraph state format.
+
+    Args:
+        scenario: A Scenario object (e.g., TaiwanStraitScenario)
+        max_turns: Maximum number of turns for the simulation
+
+    Returns:
+        Initialized GameState ready for LangGraph execution
+    """
+    # Convert scenario units to state format
+    blue_units = []
+    for unit in scenario.blue_force.units:
+        blue_units.append(Unit(
+            id=unit.id,
+            name=unit.name,
+            type=unit.type,
+            force="blue",
+            position=Position(
+                lat=unit.position.lat,
+                lon=unit.position.lon,
+                grid_ref=unit.position.grid_ref
+            ),
+            status="ready",
+            capabilities=unit.capabilities
+        ))
+
+    red_units = []
+    for unit in scenario.red_force.units:
+        red_units.append(Unit(
+            id=unit.id,
+            name=unit.name,
+            type=unit.type,
+            force="red",
+            position=Position(
+                lat=unit.position.lat,
+                lon=unit.position.lon,
+                grid_ref=unit.position.grid_ref
+            ),
+            status="ready",
+            capabilities=unit.capabilities
+        ))
+
+    # Convert objectives to dict format
+    objectives = {}
+    for obj in scenario.objectives:
+        objectives[obj.id] = {
+            "name": obj.name,
+            "description": obj.description,
+            "position": {
+                "lat": obj.position.lat,
+                "lon": obj.position.lon,
+                "grid_ref": obj.position.grid_ref
+            },
+            "value": obj.value,
+            "owner": obj.owner
+        }
+
+    return GameState(
+        scenario_name=scenario.name,
+        turn_number=1,
+        max_turns=max_turns,
+        phase="blue_planning",
+        messages=[],
+        blue_units=blue_units,
+        red_units=red_units,
+        action_history=[],
+        blue_scores=[],
+        red_scores=[],
+        objectives=objectives,
+        terrain_data=scenario.terrain_data,
         is_complete=False,
         winner=None
     )

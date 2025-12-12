@@ -161,7 +161,7 @@ export default function Dashboard() {
             LLM Evaluation Results
           </h2>
 
-          {demoEval && (
+          {demoEval && demoEval.overall_percentage !== undefined && (
             <>
               <div className="mb-6">
                 <div className="flex items-end gap-2 mb-2">
@@ -179,7 +179,7 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-3">
-                {Object.entries(demoEval.category_scores).map(([cat, score]) => (
+                {demoEval.category_scores && Object.entries(demoEval.category_scores).map(([cat, score]) => (
                   <CategoryScore key={cat} category={cat} score={score} />
                 ))}
               </div>

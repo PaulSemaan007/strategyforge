@@ -210,8 +210,8 @@ def analyst_node(state: GameState) -> dict:
 
 def should_continue(state: GameState) -> Literal["continue", "end"]:
     """Determine if the simulation should continue or end."""
-    # End conditions
-    max_turns = 10
+    # End conditions - use state's max_turns, default to 5 if not set
+    max_turns = state.get("max_turns", 5)
 
     if state["turn_number"] > max_turns:
         return "end"

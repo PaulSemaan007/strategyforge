@@ -69,3 +69,6 @@ logs/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+
+# Personal documents
+resume/

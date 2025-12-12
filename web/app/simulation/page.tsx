@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { Play, Square, Users, MessageSquare, Clock, ChevronRight } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Play, Square, Users, MessageSquare, Clock, ChevronRight, AlertCircle, Wifi, WifiOff } from 'lucide-react'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
 interface AgentMessage {
   agent: string
@@ -10,7 +12,7 @@ interface AgentMessage {
   timestamp: string
 }
 
-// Demo simulation data
+// Demo simulation data (fallback when API unavailable)
 const DEMO_MESSAGES: AgentMessage[] = [
   {
     agent: 'blue_commander',
@@ -81,28 +83,6 @@ Within 6-12 hours based on Red's diversionary timeline. Blue should consider ran
 - Blue Geospatial Accuracy: 85% (correct distance calculations)
 - Red Strategic Coherence: 82% (logical action sequence)
 - Overall Turn Score: 78%`
-  },
-  {
-    agent: 'blue_commander',
-    turn: 2,
-    timestamp: '00:04:12',
-    content: `**UPDATED ASSESSMENT**
-
-Red diversionary tactics detected. Adjusting defensive posture.
-
-**IMMEDIATE ACTIONS**
-
-1. Randomize CAP rotation schedule - eliminate predictable gaps
-2. Deploy additional E-2 Hawkeye for extended AEW coverage
-3. Position destroyer group at Grid TS-2200 for SAM coverage
-
-**COUNTER-MEASURES**
-
-Red's electronic warfare preparation suggests SEAD intent. Recommend:
-- Activate decoy emitters at Grid TW-0800
-- Maintain radar silence on primary SAM batteries until engagement
-
-The submarine threat at TS-1800 requires immediate ASW response with P-3 patrol aircraft.`
   }
 ]
 
@@ -111,10 +91,111 @@ export default function SimulationPage() {
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [currentTurn, setCurrentTurn] = useState(0)
   const [scenario, setScenario] = useState('taiwan_strait')
-  const [maxTurns, setMaxTurns] = useState(5)
+  const [maxTurns, setMaxTurns] = useState(3)
+  const [error, setError] = useState<string | null>(null)
+  const [useDemo, setUseDemo] = useState(false)
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const startSimulation = () => {
+  // Check API connectivity on mount
+  useEffect(() => {
+    const checkApi = async () => {
+      try {
+        const res = await fetch(`${API_URL}/`, { method: 'GET' })
+        setApiConnected(res.ok)
+      } catch {
+        setApiConnected(false)
+      }
+    }
+    checkApi()
+  }, [])
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const startSimulation = async () => {
     setIsRunning(true)
+    setMessages([])
+    setCurrentTurn(1)
+    setError(null)
+
+    // If API not connected, use demo mode
+    if (!apiConnected) {
+      runDemoSimulation()
+      return
+    }
+
+    try {
+      // Start simulation via API
+      const response = await fetch(`${API_URL}/api/simulation/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario,
+          turns: maxTurns,
+          model: 'llama3.1:8b'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const { job_id } = await response.json()
+
+      // Connect to SSE stream
+      const eventSource = new EventSource(`${API_URL}/api/simulation/${job_id}/stream`)
+      eventSourceRef.current = eventSource
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+
+          if (data.type === 'message' && data.agent && data.content) {
+            setMessages(prev => [...prev, {
+              agent: data.agent,
+              content: data.content,
+              turn: data.turn || currentTurn,
+              timestamp: data.timestamp || new Date().toLocaleTimeString()
+            }])
+            if (data.turn) {
+              setCurrentTurn(data.turn)
+            }
+          } else if (data.type === 'status' && data.status === 'completed') {
+            setIsRunning(false)
+            eventSource.close()
+          } else if (data.type === 'error') {
+            setError(data.message || 'Simulation error')
+            setIsRunning(false)
+            eventSource.close()
+          }
+        } catch (e) {
+          console.error('Failed to parse SSE message:', e)
+        }
+      }
+
+      eventSource.onerror = (e) => {
+        console.error('SSE connection error:', e)
+        // Don't show error if simulation completed normally
+        if (isRunning) {
+          setError('Connection lost. The simulation may still be running on the server.')
+        }
+        setIsRunning(false)
+        eventSource.close()
+      }
+
+    } catch (e) {
+      console.error('Failed to start simulation:', e)
+      setError(`Failed to connect to API. Running demo mode instead.`)
+      runDemoSimulation()
+    }
+  }
+
+  const runDemoSimulation = () => {
+    setUseDemo(true)
     setMessages([])
     setCurrentTurn(1)
 
@@ -129,11 +210,16 @@ export default function SimulationPage() {
     // End simulation
     setTimeout(() => {
       setIsRunning(false)
+      setUseDemo(false)
     }, DEMO_MESSAGES.length * 2000 + 1000)
   }
 
   const stopSimulation = () => {
     setIsRunning(false)
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
   }
 
   const getAgentColor = (agent: string): string => {
@@ -170,10 +256,27 @@ export default function SimulationPage() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold text-white">Wargaming Simulation</h1>
-            <p className="text-sm text-slate-400">Multi-agent turn-based simulation</p>
+            <p className="text-sm text-slate-400">Multi-agent turn-based simulation powered by LangGraph</p>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* API Status Indicator */}
+            <div className="flex items-center gap-2 text-sm">
+              {apiConnected === null ? (
+                <span className="text-slate-500">Checking API...</span>
+              ) : apiConnected ? (
+                <span className="flex items-center gap-1 text-green-400">
+                  <Wifi size={14} />
+                  API Connected
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-yellow-400">
+                  <WifiOff size={14} />
+                  Demo Mode
+                </span>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <label className="text-sm text-slate-400">Scenario:</label>
               <select
@@ -192,7 +295,7 @@ export default function SimulationPage() {
               <input
                 type="number"
                 value={maxTurns}
-                onChange={e => setMaxTurns(parseInt(e.target.value) || 5)}
+                onChange={e => setMaxTurns(parseInt(e.target.value) || 3)}
                 disabled={isRunning}
                 min={1}
                 max={10}
@@ -221,6 +324,20 @@ export default function SimulationPage() {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="p-3 bg-red-900/50 border-b border-red-700 flex items-center gap-2 text-red-200">
+          <AlertCircle size={16} />
+          <span className="text-sm">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-200"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         {/* Message Feed */}
         <div className="flex-1 p-4 overflow-auto">
@@ -235,6 +352,11 @@ export default function SimulationPage() {
                 <p className="text-sm text-slate-600">
                   Agents: Blue Commander, Red Commander, Analyst
                 </p>
+                {!apiConnected && (
+                  <p className="text-sm text-yellow-500 mt-4">
+                    Note: API not connected. Will run in demo mode.
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -278,6 +400,13 @@ export default function SimulationPage() {
                           <div key={j} className="ml-2 my-1">{line}</div>
                         )
                       }
+                      if (line.startsWith('### ')) {
+                        return (
+                          <div key={j} className="font-bold text-white mt-3 mb-1">
+                            {line.replace(/^### /, '')}
+                          </div>
+                        )
+                      }
                       return <div key={j}>{line}</div>
                     })}
                   </div>
@@ -291,9 +420,10 @@ export default function SimulationPage() {
                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span>Agents reasoning...</span>
+                  <span>{useDemo ? 'Loading demo data...' : 'Agents reasoning with Ollama...'}</span>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
@@ -317,6 +447,12 @@ export default function SimulationPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Messages</span>
                 <span className="text-white">{messages.length}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Mode</span>
+                <span className={apiConnected ? 'text-green-400' : 'text-yellow-400'}>
+                  {apiConnected ? 'Live AI' : 'Demo'}
+                </span>
               </div>
             </div>
           </div>
@@ -348,6 +484,16 @@ export default function SimulationPage() {
                 <span className="text-white">LangGraph</span>
               </div>
             </div>
+          </div>
+
+          {/* Connection Info */}
+          <div className="mt-6 p-3 bg-slate-800/30 rounded-lg text-xs text-slate-500">
+            <p>API: {API_URL}</p>
+            <p className="mt-1">
+              {apiConnected
+                ? 'Connected to backend. Using real LLM responses.'
+                : 'Backend not available. Using demo data.'}
+            </p>
           </div>
         </div>
       </div>
