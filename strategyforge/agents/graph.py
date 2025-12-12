@@ -135,31 +135,47 @@ def invoke_with_tools(llm, messages: list, max_iterations: int = 3):
     Returns:
         Final response after all tool calls are resolved
     """
-    response = llm.invoke(messages)
-    iteration = 0
     tools_used = []
 
-    while hasattr(response, 'tool_calls') and response.tool_calls and iteration < max_iterations:
-        # Execute the tools
-        tool_results = execute_tool_calls(response.tool_calls)
-
-        # Track which tools were used
-        for result in tool_results:
-            tools_used.append(result["name"])
-
-        # Add the AI message with tool calls to history
-        messages.append(response)
-
-        # Add tool results to messages
-        for result in tool_results:
-            messages.append(ToolMessage(
-                content=result["result"],
-                tool_call_id=result["tool_call_id"]
-            ))
-
-        # Get next response from LLM
+    try:
         response = llm.invoke(messages)
-        iteration += 1
+        iteration = 0
+
+        while hasattr(response, 'tool_calls') and response.tool_calls and iteration < max_iterations:
+            try:
+                # Execute the tools
+                tool_results = execute_tool_calls(response.tool_calls)
+
+                # Track which tools were used
+                for result in tool_results:
+                    tools_used.append(result["name"])
+
+                # Add the AI message with tool calls to history
+                messages.append(response)
+
+                # Add tool results to messages
+                for result in tool_results:
+                    messages.append(ToolMessage(
+                        content=result["result"],
+                        tool_call_id=result["tool_call_id"]
+                    ))
+
+                # Get next response from LLM
+                response = llm.invoke(messages)
+                iteration += 1
+            except Exception as tool_error:
+                # Tool calling failed - break out of loop and use current response
+                print(f"Tool calling error (continuing without tools): {tool_error}")
+                break
+
+    except Exception as e:
+        # If tool-enabled invoke fails, try without tools
+        print(f"Tool-enabled LLM failed, falling back to basic invoke: {e}")
+        from langchain_core.messages import AIMessage as FallbackAIMessage
+
+        # Create base LLM without tools
+        base_llm = create_llm()
+        response = base_llm.invoke(messages)
 
     # Store tools_used on the response for later reference
     response.tools_used = tools_used
