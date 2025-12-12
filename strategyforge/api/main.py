@@ -414,7 +414,10 @@ async def start_simulation(request: SimulationRequest, background_tasks: Backgro
         "max_turns": request.turns,
         "scenario": request.scenario,
         "model": request.model,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now().isoformat(),
+        "blue_units": [],  # Track current blue unit positions
+        "red_units": [],   # Track current red unit positions
+        "position_updates": []  # Queue of position updates to stream
     }
 
     # Run simulation in background
@@ -442,6 +445,7 @@ async def stream_simulation(job_id: str):
     async def event_generator():
         """Generate SSE events for simulation updates."""
         last_message_count = 0
+        last_position_update_count = 0
 
         while True:
             job = simulation_jobs.get(job_id)
@@ -455,6 +459,13 @@ async def stream_simulation(job_id: str):
                 for msg in job["messages"][last_message_count:]:
                     yield f"data: {json.dumps({'type': 'message', **msg})}\n\n"
                 last_message_count = current_count
+
+            # Send any new position updates
+            current_position_count = len(job.get("position_updates", []))
+            if current_position_count > last_position_update_count:
+                for pos_update in job["position_updates"][last_position_update_count:]:
+                    yield f"data: {json.dumps(pos_update)}\n\n"
+                last_position_update_count = current_position_count
 
             # Send status updates
             if job["status"] == "completed":
@@ -543,6 +554,47 @@ async def _run_simulation_task(job_id: str, scenario_id: str, max_turns: int, mo
 
                             # Add to messages list
                             simulation_jobs[job_id]["messages"].append(formatted_msg)
+
+                # Capture position updates from agent nodes
+                if "blue_units" in node_state:
+                    simulation_jobs[job_id]["blue_units"] = node_state["blue_units"]
+                    # Create position update event
+                    position_event = {
+                        "type": "position_update",
+                        "force": "blue",
+                        "turn": node_state.get("turn_number", simulation_jobs[job_id]["turn"]),
+                        "units": [
+                            {
+                                "id": u["id"],
+                                "name": u["name"],
+                                "lat": u["position"]["lat"],
+                                "lon": u["position"]["lon"],
+                                "status": u["status"]
+                            }
+                            for u in node_state["blue_units"]
+                        ]
+                    }
+                    simulation_jobs[job_id]["position_updates"].append(position_event)
+
+                if "red_units" in node_state:
+                    simulation_jobs[job_id]["red_units"] = node_state["red_units"]
+                    # Create position update event
+                    position_event = {
+                        "type": "position_update",
+                        "force": "red",
+                        "turn": node_state.get("turn_number", simulation_jobs[job_id]["turn"]),
+                        "units": [
+                            {
+                                "id": u["id"],
+                                "name": u["name"],
+                                "lat": u["position"]["lat"],
+                                "lon": u["position"]["lon"],
+                                "status": u["status"]
+                            }
+                            for u in node_state["red_units"]
+                        ]
+                    }
+                    simulation_jobs[job_id]["position_updates"].append(position_event)
 
                 # Update turn number if present
                 if "turn_number" in node_state:

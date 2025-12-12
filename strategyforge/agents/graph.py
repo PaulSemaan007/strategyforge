@@ -231,6 +231,10 @@ def blue_commander_node(state: GameState) -> dict:
     # Update state
     new_actions = state["action_history"] + [action]
 
+    # Simulate unit movements based on the action
+    action_summary = _extract_action_summary(response.content)
+    updated_blue_units = _simulate_unit_movement(state["blue_units"], action_summary, "blue")
+
     # Create AI message with tools_used metadata
     ai_message = AIMessage(content=response.content, name="blue_commander")
     ai_message.tools_used = tools_used
@@ -238,7 +242,8 @@ def blue_commander_node(state: GameState) -> dict:
     return {
         "messages": [ai_message],
         "action_history": new_actions,
-        "phase": "red_planning"
+        "phase": "red_planning",
+        "blue_units": updated_blue_units
     }
 
 
@@ -276,17 +281,22 @@ def red_commander_node(state: GameState) -> dict:
     # Get tools used from response (if any)
     tools_used = getattr(response, 'tools_used', [])
 
+    action_summary = _extract_action_summary(response.content)
+
     action = AgentAction(
         agent="red_commander",
         turn=state["turn_number"],
         action_type="strategic_counter",
-        description=_extract_action_summary(response.content),
+        description=action_summary,
         grid_references=_extract_grid_references(response.content),
         units_involved=[],
         reasoning=response.content
     )
 
     new_actions = state["action_history"] + [action]
+
+    # Simulate unit movements based on the action
+    updated_red_units = _simulate_unit_movement(state["red_units"], action_summary, "red")
 
     # Create AI message with tools_used metadata
     ai_message = AIMessage(content=response.content, name="red_commander")
@@ -295,7 +305,8 @@ def red_commander_node(state: GameState) -> dict:
     return {
         "messages": [ai_message],
         "action_history": new_actions,
-        "phase": "analysis"
+        "phase": "analysis",
+        "red_units": updated_red_units
     }
 
 
@@ -526,3 +537,64 @@ def _extract_evaluation_scores(content: str) -> dict:
                 scores[current_force][metric.lower().replace(" ", "_")] = float(score)
 
     return scores
+
+
+def _simulate_unit_movement(units: list, action_description: str, force: str) -> list:
+    """
+    Simulate realistic unit movements based on agent actions.
+
+    For demo purposes, moves units slightly based on keywords in the action:
+    - "advance" / "attack" -> move toward enemy
+    - "retreat" / "withdraw" -> move away
+    - "patrol" / "position" -> small random adjustment
+    """
+    import copy
+    import random
+
+    updated = copy.deepcopy(units)
+
+    # Movement delta in degrees (~1-5 km at this latitude)
+    BASE_DELTA = 0.02
+    action_lower = action_description.lower()
+
+    for unit in updated:
+        delta_lat = 0.0
+        delta_lon = 0.0
+
+        # Determine movement based on action keywords
+        if any(word in action_lower for word in ["advance", "attack", "strike", "engage", "push"]):
+            # Move toward center of strait (Blue moves west, Red moves east)
+            if force == "blue":
+                delta_lon = -BASE_DELTA * random.uniform(0.5, 1.5)
+            else:  # red
+                delta_lon = BASE_DELTA * random.uniform(0.5, 1.5)
+            delta_lat = random.uniform(-0.01, 0.01)
+
+        elif any(word in action_lower for word in ["retreat", "withdraw", "fall back", "defensive"]):
+            # Move away from enemy
+            if force == "blue":
+                delta_lon = BASE_DELTA * random.uniform(0.5, 1.0)
+            else:  # red
+                delta_lon = -BASE_DELTA * random.uniform(0.5, 1.0)
+            delta_lat = random.uniform(-0.01, 0.01)
+
+        elif any(word in action_lower for word in ["flank", "maneuver", "reposition"]):
+            # Lateral movement
+            delta_lat = BASE_DELTA * random.uniform(-1.0, 1.0)
+            delta_lon = random.uniform(-0.01, 0.01)
+
+        elif any(word in action_lower for word in ["patrol", "monitor", "maintain", "hold"]):
+            # Small random adjustment to show activity
+            delta_lat = random.uniform(-0.005, 0.005)
+            delta_lon = random.uniform(-0.005, 0.005)
+
+        else:
+            # Default: small movement toward objectives
+            delta_lat = random.uniform(-0.008, 0.008)
+            delta_lon = random.uniform(-0.01, 0.01)
+
+        # Apply movement
+        unit["position"]["lat"] += delta_lat
+        unit["position"]["lon"] += delta_lon
+
+    return updated

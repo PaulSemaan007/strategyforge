@@ -1,7 +1,18 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Play, Square, Users, MessageSquare, Clock, ChevronRight, AlertCircle, Wifi, WifiOff } from 'lucide-react'
+import { Play, Square, Users, MessageSquare, Clock, ChevronRight, AlertCircle, Wifi, WifiOff, Map as MapIcon } from 'lucide-react'
+import dynamic from 'next/dynamic'
+
+// Dynamically import the map component to avoid SSR issues
+const SimulationMap = dynamic(() => import('@/components/SimulationMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full bg-slate-900 flex items-center justify-center">
+      <div className="text-slate-500">Loading map...</div>
+    </div>
+  ),
+})
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
 
@@ -11,6 +22,14 @@ interface AgentMessage {
   turn: number
   timestamp: string
   tools_used?: string[]
+}
+
+interface UnitPosition {
+  id: string
+  name: string
+  lat: number
+  lon: number
+  status: string
 }
 
 // Demo simulation data (fallback when API unavailable)
@@ -92,6 +111,19 @@ Within 6-12 hours based on Red's diversionary timeline. Blue should consider ran
   }
 ]
 
+// Demo initial unit positions (for demo mode)
+const DEMO_BLUE_UNITS: UnitPosition[] = [
+  { id: 'blue-cvn-1', name: 'USS Ronald Reagan', lat: 24.8, lon: 122.0, status: 'ready' },
+  { id: 'blue-ddg-1', name: 'USS Barry', lat: 24.6, lon: 121.8, status: 'ready' },
+  { id: 'blue-ddg-2', name: 'USS Mustin', lat: 25.0, lon: 121.9, status: 'ready' },
+]
+
+const DEMO_RED_UNITS: UnitPosition[] = [
+  { id: 'red-cv-1', name: 'Liaoning', lat: 24.5, lon: 118.5, status: 'ready' },
+  { id: 'red-ddg-1', name: 'Type 055 Nanchang', lat: 24.3, lon: 118.8, status: 'ready' },
+  { id: 'red-sub-1', name: 'Type 093 SSN', lat: 24.0, lon: 119.0, status: 'ready' },
+]
+
 export default function SimulationPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [messages, setMessages] = useState<AgentMessage[]>([])
@@ -101,6 +133,9 @@ export default function SimulationPage() {
   const [error, setError] = useState<string | null>(null)
   const [useDemo, setUseDemo] = useState(false)
   const [apiConnected, setApiConnected] = useState<boolean | null>(null)
+  const [showMap, setShowMap] = useState(true)
+  const [blueUnits, setBlueUnits] = useState<UnitPosition[]>(DEMO_BLUE_UNITS)
+  const [redUnits, setRedUnits] = useState<UnitPosition[]>(DEMO_RED_UNITS)
   const eventSourceRef = useRef<EventSource | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -171,6 +206,13 @@ export default function SimulationPage() {
             if (data.turn) {
               setCurrentTurn(data.turn)
             }
+          } else if (data.type === 'position_update') {
+            // Handle position updates from agents
+            if (data.force === 'blue' && data.units) {
+              setBlueUnits(data.units)
+            } else if (data.force === 'red' && data.units) {
+              setRedUnits(data.units)
+            }
           } else if (data.type === 'status' && data.status === 'completed') {
             setIsRunning(false)
             eventSource.close()
@@ -205,12 +247,30 @@ export default function SimulationPage() {
     setUseDemo(true)
     setMessages([])
     setCurrentTurn(1)
+    // Reset to initial positions
+    setBlueUnits(DEMO_BLUE_UNITS)
+    setRedUnits(DEMO_RED_UNITS)
 
-    // Simulate messages appearing over time
+    // Simulate messages appearing over time with unit movements
     DEMO_MESSAGES.forEach((msg, i) => {
       setTimeout(() => {
         setMessages(prev => [...prev, msg])
         setCurrentTurn(msg.turn)
+
+        // Simulate unit movement based on agent
+        if (msg.agent === 'blue_commander') {
+          setBlueUnits(prev => prev.map(unit => ({
+            ...unit,
+            lat: unit.lat + (Math.random() - 0.5) * 0.02,
+            lon: unit.lon - 0.02 - Math.random() * 0.01 // Move west toward strait
+          })))
+        } else if (msg.agent === 'red_commander') {
+          setRedUnits(prev => prev.map(unit => ({
+            ...unit,
+            lat: unit.lat + (Math.random() - 0.5) * 0.02,
+            lon: unit.lon + 0.02 + Math.random() * 0.01 // Move east toward strait
+          })))
+        }
       }, (i + 1) * 2000)
     })
 
@@ -310,6 +370,19 @@ export default function SimulationPage() {
               />
             </div>
 
+            {/* Map Toggle */}
+            <button
+              onClick={() => setShowMap(!showMap)}
+              className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                showMap
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              <MapIcon size={16} />
+              {showMap ? 'Hide Map' : 'Show Map'}
+            </button>
+
             {!isRunning ? (
               <button
                 onClick={startSimulation}
@@ -346,27 +419,45 @@ export default function SimulationPage() {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Message Feed */}
-        <div className="flex-1 p-4 overflow-auto">
-          {messages.length === 0 && !isRunning ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <Users size={48} className="mx-auto text-slate-600 mb-4" />
-                <h2 className="text-xl font-medium text-slate-400 mb-2">No Simulation Running</h2>
-                <p className="text-slate-500 mb-4">
-                  Click "Start Simulation" to begin the wargaming exercise
-                </p>
-                <p className="text-sm text-slate-600">
-                  Agents: Blue Commander, Red Commander, Analyst
-                </p>
-                {!apiConnected && (
-                  <p className="text-sm text-yellow-500 mt-4">
-                    Note: API not connected. Will run in demo mode.
-                  </p>
-                )}
-              </div>
+        {/* Main Content Area - Split View */}
+        <div className={`flex-1 flex ${showMap ? 'flex-col lg:flex-row' : ''} overflow-hidden`}>
+          {/* Map Panel */}
+          {showMap && (
+            <div className="lg:w-1/2 h-64 lg:h-full border-b lg:border-b-0 lg:border-r border-slate-700/50">
+              <SimulationMap
+                blueUnits={blueUnits}
+                redUnits={redUnits}
+                isRunning={isRunning}
+              />
             </div>
-          ) : (
+          )}
+
+          {/* Message Feed */}
+          <div className={`${showMap ? 'lg:w-1/2' : 'w-full'} flex-1 p-4 overflow-auto`}>
+            {messages.length === 0 && !isRunning ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Users size={48} className="mx-auto text-slate-600 mb-4" />
+                  <h2 className="text-xl font-medium text-slate-400 mb-2">No Simulation Running</h2>
+                  <p className="text-slate-500 mb-4">
+                    Click "Start Simulation" to begin the wargaming exercise
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    Agents: Blue Commander, Red Commander, Analyst
+                  </p>
+                  {showMap && (
+                    <p className="text-sm text-blue-400 mt-4">
+                      Map shows initial unit positions. Watch them move during simulation!
+                    </p>
+                  )}
+                  {!apiConnected && (
+                    <p className="text-sm text-yellow-500 mt-4">
+                      Note: API not connected. Will run in demo mode.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
             <div className="space-y-4 max-w-4xl mx-auto">
               {messages.map((msg, i) => (
                 <div
@@ -448,6 +539,7 @@ export default function SimulationPage() {
               <div ref={messagesEndRef} />
             </div>
           )}
+          </div>
         </div>
 
         {/* Sidebar */}
