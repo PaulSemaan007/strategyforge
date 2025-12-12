@@ -45,11 +45,12 @@ from .prompts import AgentPrompts, format_turn_prompt
 from ..tools.geospatial import GEOSPATIAL_TOOLS
 
 
-def create_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.7):
+def create_llm(model_name: str = "llama-3.3-70b-versatile", temperature: float = 0.7):
     """
     Create an LLM instance.
 
     Uses Groq (free cloud API) if GROQ_API_KEY is set, otherwise falls back to Ollama (local).
+    Default model is llama-3.3-70b-versatile which supports native tool calling.
     """
     groq_api_key = os.environ.get("GROQ_API_KEY")
 
@@ -72,11 +73,12 @@ def create_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.
         )
 
 
-def create_llm_with_tools(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.7):
+def create_llm_with_tools(model_name: str = "llama-3.3-70b-versatile", temperature: float = 0.7):
     """
     Create an LLM instance with geospatial tools bound.
 
     This enables the LLM to call tools like get_distance, analyze_terrain, etc.
+    Uses llama-3.3-70b-versatile by default which has native tool calling support.
     """
     llm = create_llm(model_name, temperature)
     return llm.bind_tools(GEOSPATIAL_TOOLS)
