@@ -37,11 +37,12 @@ Architecture:
 
 import os
 from typing import Literal
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 
 from .state import GameState, format_game_state_for_agent, AgentAction
 from .prompts import AgentPrompts, format_turn_prompt
+from ..tools.geospatial import GEOSPATIAL_TOOLS
 
 
 def create_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.7):
@@ -71,13 +72,109 @@ def create_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.
         )
 
 
+def create_llm_with_tools(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.7):
+    """
+    Create an LLM instance with geospatial tools bound.
+
+    This enables the LLM to call tools like get_distance, analyze_terrain, etc.
+    """
+    llm = create_llm(model_name, temperature)
+    return llm.bind_tools(GEOSPATIAL_TOOLS)
+
+
+def execute_tool_calls(tool_calls: list) -> list[dict]:
+    """
+    Execute tool calls from the LLM and return results.
+
+    Args:
+        tool_calls: List of tool calls from LLM response
+
+    Returns:
+        List of tool results with tool_call_id, name, and result
+    """
+    tool_map = {tool.name: tool for tool in GEOSPATIAL_TOOLS}
+    results = []
+
+    for call in tool_calls:
+        tool_name = call["name"]
+        tool_args = call["args"]
+
+        if tool_name in tool_map:
+            try:
+                result = tool_map[tool_name].invoke(tool_args)
+                results.append({
+                    "tool_call_id": call["id"],
+                    "name": tool_name,
+                    "result": result
+                })
+            except Exception as e:
+                results.append({
+                    "tool_call_id": call["id"],
+                    "name": tool_name,
+                    "result": f"Error executing tool: {str(e)}"
+                })
+        else:
+            results.append({
+                "tool_call_id": call["id"],
+                "name": tool_name,
+                "result": f"Unknown tool: {tool_name}"
+            })
+
+    return results
+
+
+def invoke_with_tools(llm, messages: list, max_iterations: int = 3):
+    """
+    Invoke LLM with tool support, handling tool calls iteratively.
+
+    Args:
+        llm: The LLM with tools bound
+        messages: Initial message list
+        max_iterations: Maximum tool-calling iterations
+
+    Returns:
+        Final response after all tool calls are resolved
+    """
+    response = llm.invoke(messages)
+    iteration = 0
+    tools_used = []
+
+    while hasattr(response, 'tool_calls') and response.tool_calls and iteration < max_iterations:
+        # Execute the tools
+        tool_results = execute_tool_calls(response.tool_calls)
+
+        # Track which tools were used
+        for result in tool_results:
+            tools_used.append(result["name"])
+
+        # Add the AI message with tool calls to history
+        messages.append(response)
+
+        # Add tool results to messages
+        for result in tool_results:
+            messages.append(ToolMessage(
+                content=result["result"],
+                tool_call_id=result["tool_call_id"]
+            ))
+
+        # Get next response from LLM
+        response = llm.invoke(messages)
+        iteration += 1
+
+    # Store tools_used on the response for later reference
+    response.tools_used = tools_used
+
+    return response
+
+
 def blue_commander_node(state: GameState) -> dict:
     """
     Blue Force Commander agent node.
 
     Analyzes the situation and recommends actions for friendly forces.
+    Uses geospatial tools to make accurate distance and terrain calculations.
     """
-    llm = create_llm()
+    llm = create_llm_with_tools()
 
     # Build the prompt
     system_prompt = AgentPrompts.get_blue_commander_prompt()
@@ -88,7 +185,7 @@ def blue_commander_node(state: GameState) -> dict:
         phase="Blue Force Planning",
         game_state=game_context,
         previous_actions=_format_recent_actions(state, "blue_commander"),
-        objective="Analyze the current situation and recommend your next strategic move."
+        objective="Analyze the current situation and recommend your next strategic move. Use the geospatial tools to calculate distances and analyze terrain."
     )
 
     messages = [
@@ -96,8 +193,11 @@ def blue_commander_node(state: GameState) -> dict:
         HumanMessage(content=turn_prompt)
     ]
 
-    # Get LLM response
-    response = llm.invoke(messages)
+    # Get LLM response with tool support
+    response = invoke_with_tools(llm, messages)
+
+    # Get tools used from response (if any)
+    tools_used = getattr(response, 'tools_used', [])
 
     # Create action record
     action = AgentAction(
@@ -113,8 +213,12 @@ def blue_commander_node(state: GameState) -> dict:
     # Update state
     new_actions = state["action_history"] + [action]
 
+    # Create AI message with tools_used metadata
+    ai_message = AIMessage(content=response.content, name="blue_commander")
+    ai_message.tools_used = tools_used
+
     return {
-        "messages": [AIMessage(content=response.content, name="blue_commander")],
+        "messages": [ai_message],
         "action_history": new_actions,
         "phase": "red_planning"
     }
@@ -125,8 +229,9 @@ def red_commander_node(state: GameState) -> dict:
     Red Force Commander agent node.
 
     Provides adversarial perspective and counter-moves.
+    Uses geospatial tools to make accurate distance and terrain calculations.
     """
-    llm = create_llm()
+    llm = create_llm_with_tools()
 
     system_prompt = AgentPrompts.get_red_commander_prompt()
     game_context = format_game_state_for_agent(state, "red_commander")
@@ -139,7 +244,7 @@ def red_commander_node(state: GameState) -> dict:
         phase="Red Force Planning",
         game_state=game_context,
         previous_actions=f"Blue Force just executed: {blue_last_action}",
-        objective="Counter Blue Force's move and advance Red Force objectives."
+        objective="Counter Blue Force's move and advance Red Force objectives. Use the geospatial tools to calculate distances and analyze terrain."
     )
 
     messages = [
@@ -147,7 +252,11 @@ def red_commander_node(state: GameState) -> dict:
         HumanMessage(content=turn_prompt)
     ]
 
-    response = llm.invoke(messages)
+    # Get LLM response with tool support
+    response = invoke_with_tools(llm, messages)
+
+    # Get tools used from response (if any)
+    tools_used = getattr(response, 'tools_used', [])
 
     action = AgentAction(
         agent="red_commander",
@@ -161,8 +270,12 @@ def red_commander_node(state: GameState) -> dict:
 
     new_actions = state["action_history"] + [action]
 
+    # Create AI message with tools_used metadata
+    ai_message = AIMessage(content=response.content, name="red_commander")
+    ai_message.tools_used = tools_used
+
     return {
-        "messages": [AIMessage(content=response.content, name="red_commander")],
+        "messages": [ai_message],
         "action_history": new_actions,
         "phase": "analysis"
     }
@@ -173,8 +286,9 @@ def analyst_node(state: GameState) -> dict:
     Analyst agent node.
 
     Provides objective evaluation of both forces' decisions.
+    Uses geospatial tools to verify distance and terrain claims.
     """
-    llm = create_llm()
+    llm = create_llm_with_tools()
 
     system_prompt = AgentPrompts.get_analyst_prompt()
     game_context = format_game_state_for_agent(state, "analyst")
@@ -188,7 +302,7 @@ def analyst_node(state: GameState) -> dict:
         phase="Analysis",
         game_state=game_context,
         previous_actions=f"Blue: {blue_action}\n\nRed: {red_action}",
-        objective="Evaluate both commanders' decisions and assess the strategic balance."
+        objective="Evaluate both commanders' decisions and assess the strategic balance. Use geospatial tools to verify any distance or terrain claims made by the commanders."
     )
 
     messages = [
@@ -196,7 +310,11 @@ def analyst_node(state: GameState) -> dict:
         HumanMessage(content=turn_prompt)
     ]
 
-    response = llm.invoke(messages)
+    # Get LLM response with tool support
+    response = invoke_with_tools(llm, messages)
+
+    # Get tools used from response (if any)
+    tools_used = getattr(response, 'tools_used', [])
 
     # Extract evaluation scores from analyst response
     scores = _extract_evaluation_scores(response.content)
@@ -217,8 +335,12 @@ def analyst_node(state: GameState) -> dict:
     new_blue_scores = state["blue_scores"] + [scores.get("blue", {})]
     new_red_scores = state["red_scores"] + [scores.get("red", {})]
 
+    # Create AI message with tools_used metadata
+    ai_message = AIMessage(content=response.content, name="analyst")
+    ai_message.tools_used = tools_used
+
     return {
-        "messages": [AIMessage(content=response.content, name="analyst")],
+        "messages": [ai_message],
         "action_history": new_actions,
         "blue_scores": new_blue_scores,
         "red_scores": new_red_scores,

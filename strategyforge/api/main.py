@@ -529,12 +529,16 @@ async def _run_simulation_task(job_id: str, scenario_id: str, max_turns: int, mo
                             # Get agent name from message
                             agent_name = getattr(msg, 'name', node_name)
 
+                            # Get tools used (if any)
+                            tools_used = getattr(msg, 'tools_used', [])
+
                             # Format message for frontend
                             formatted_msg = {
                                 "agent": agent_name,
                                 "content": msg.content,
                                 "turn": node_state.get("turn_number", simulation_jobs[job_id]["turn"]),
-                                "timestamp": datetime.now().strftime("%H:%M:%S")
+                                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                                "tools_used": tools_used
                             }
 
                             # Add to messages list

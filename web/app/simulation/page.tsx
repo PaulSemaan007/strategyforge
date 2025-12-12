@@ -10,6 +10,7 @@ interface AgentMessage {
   content: string
   turn: number
   timestamp: string
+  tools_used?: string[]
 }
 
 // Demo simulation data (fallback when API unavailable)
@@ -18,9 +19,10 @@ const DEMO_MESSAGES: AgentMessage[] = [
     agent: 'blue_commander',
     turn: 1,
     timestamp: '00:00:15',
+    tools_used: ['get_distance', 'analyze_terrain'],
     content: `**SITUATION ASSESSMENT**
 
-Current disposition shows Red Force naval assets concentrated at Grid ML-0501, approximately 180km from our forward positions. Intelligence indicates 3 destroyer groups and 2 submarine contacts.
+Using geospatial tools, I've calculated Red Force naval assets are exactly 178.3km from our forward positions at Grid ML-0501. Terrain analysis shows the strait provides limited concealment for approaching vessels.
 
 **RECOMMENDED ACTION**
 
@@ -42,9 +44,10 @@ By establishing CAP at the midpoint, we achieve 200km early warning coverage whi
     agent: 'red_commander',
     turn: 1,
     timestamp: '00:01:32',
+    tools_used: ['estimate_force_transit', 'check_weapon_range'],
     content: `**OPERATIONAL ASSESSMENT**
 
-Blue Force has established predictable patrol patterns. Their CAP rotations create a 15-minute gap during shift changes at approximately 0600 and 1800 hours.
+Transit time calculations show our naval forces can reach striking distance in 3.6 hours at cruise speed. Weapon range analysis confirms our anti-ship missiles can engage from current positions.
 
 **PROPOSED ACTION**
 
@@ -64,7 +67,10 @@ Blue will likely reinforce CAP and may attempt ASW sweep. This creates opportuni
     agent: 'analyst',
     turn: 1,
     timestamp: '00:02:45',
+    tools_used: ['get_distance', 'analyze_terrain'],
     content: `**STRATEGIC ASSESSMENT - TURN 1**
+
+Verified distance calculations from both commanders using geospatial tools.
 
 **Force Balance:**
 - Air Domain: Blue advantage (7.2/10) - Superior fighter coverage
@@ -72,17 +78,17 @@ Blue will likely reinforce CAP and may attempt ASW sweep. This creates opportuni
 - Information Domain: Red advantage (6.8/10) - Better SIGINT positioning
 
 **Key Observations:**
-1. Both commanders demonstrate sound tactical reasoning
+1. Both commanders used accurate geospatial data in their analysis
 2. Blue's defensive posture is appropriate given force ratios
-3. Red's identification of CAP gaps shows good intelligence analysis
+3. Red's transit time calculations align with doctrine
 
 **Critical Decision Point:**
 Within 6-12 hours based on Red's diversionary timeline. Blue should consider randomizing patrol schedules.
 
 **Evaluation Metrics:**
-- Blue Geospatial Accuracy: 85% (correct distance calculations)
-- Red Strategic Coherence: 82% (logical action sequence)
-- Overall Turn Score: 78%`
+- Blue Geospatial Accuracy: 95% (verified tool usage)
+- Red Strategic Coherence: 88% (logical action sequence)
+- Overall Turn Score: 85%`
   }
 ]
 
@@ -159,7 +165,8 @@ export default function SimulationPage() {
               agent: data.agent,
               content: data.content,
               turn: data.turn || currentTurn,
-              timestamp: data.timestamp || new Date().toLocaleTimeString()
+              timestamp: data.timestamp || new Date().toLocaleTimeString(),
+              tools_used: data.tools_used || []
             }])
             if (data.turn) {
               setCurrentTurn(data.turn)
@@ -367,9 +374,24 @@ export default function SimulationPage() {
                   className={`p-4 rounded-lg border-l-4 ${getAgentColor(msg.agent)}`}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className={`font-bold ${getAgentTextColor(msg.agent)}`}>
-                      {getAgentLabel(msg.agent)}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`font-bold ${getAgentTextColor(msg.agent)}`}>
+                        {getAgentLabel(msg.agent)}
+                      </span>
+                      {msg.tools_used && msg.tools_used.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          {msg.tools_used.map((tool, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded"
+                              title={`Used ${tool} tool`}
+                            >
+                              🔧 {tool}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 text-xs text-slate-500">
                       <span className="flex items-center gap-1">
                         <Clock size={12} />

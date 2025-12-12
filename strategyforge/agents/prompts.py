@@ -151,31 +151,47 @@ Maintain strict objectivity. Your assessments train both sides to improve."""
 
     # Tool usage instructions appended to agent prompts
     TOOL_INSTRUCTIONS = """
-## Available Tools
+## Geospatial Tools - YOU MUST USE THESE
 
-You have access to the following tools for geospatial reasoning:
+**IMPORTANT: Do NOT estimate or guess distances, ranges, or terrain. Call these tools to get accurate data.**
 
-### calculate_distance
-Calculate the distance between two positions in kilometers.
-Input: {"from_position": [lat, lon], "to_position": [lat, lon]}
-Output: Distance in kilometers
+### get_distance
+Calculate exact distance between two positions.
+**Call this EVERY TIME you mention how far apart units/positions are.**
+Args: from_lat, from_lon, to_lat, to_lon (all floats)
+Returns: Distance in km, bearing, and transit time estimates
+
+Example: To check distance from Taiwan (25.0, 121.5) to mainland (24.5, 118.0):
+→ Call get_distance(from_lat=25.0, from_lon=121.5, to_lat=24.5, to_lon=118.0)
+
+### check_weapon_range
+Verify if a target is within a weapon system's effective range.
+**Call this BEFORE recommending any engagement.**
+Args: unit_lat, unit_lon, target_lat, target_lon, weapon_range_km
+Returns: IN RANGE or OUT OF RANGE with distance details
+
+Example: Can a missile battery at (24.8, 118.5) hit a ship at (24.5, 120.0) with 250km range?
+→ Call check_weapon_range(unit_lat=24.8, unit_lon=118.5, target_lat=24.5, target_lon=120.0, weapon_range_km=250)
 
 ### analyze_terrain
-Analyze terrain characteristics at a position.
-Input: {"position": [lat, lon], "radius_km": float}
-Output: Terrain type, elevation, defensive value
+Get terrain characteristics at a position.
+**Call this when evaluating defensive positions or planning movements.**
+Args: lat, lon, analysis_type ("tactical" or "strategic")
+Returns: Terrain type, defensibility, strategic considerations
 
-### check_line_of_sight
-Determine if there is line of sight between two positions.
-Input: {"from_position": [lat, lon], "to_position": [lat, lon]}
-Output: Boolean and blocking factors
+Example: What's the terrain like at the landing beach (25.1, 121.3)?
+→ Call analyze_terrain(lat=25.1, lon=121.3, analysis_type="tactical")
 
-### get_unit_positions
-Get current positions of specified units.
-Input: {"force": "blue" | "red", "unit_type": "all" | "air" | "naval" | "ground"}
-Output: List of unit positions with status
+### estimate_force_transit
+Calculate realistic transit times for different force types.
+**Call this when planning operations or estimating response times.**
+Args: force_type ("air", "naval", or "ground"), from_lat, from_lon, to_lat, to_lon
+Returns: Transit times at different speeds with operational notes
 
-Always use these tools to verify distances and terrain before making claims about geography. Do not guess distances - calculate them."""
+Example: How long for naval forces to cross from (24.5, 118.0) to (24.5, 120.0)?
+→ Call estimate_force_transit(force_type="naval", from_lat=24.5, from_lon=118.0, to_lat=24.5, to_lon=120.0)
+
+**YOUR ANALYSIS IS ONLY CREDIBLE IF YOU USE THESE TOOLS. Commanders who guess distances get people killed.**"""
 
     @classmethod
     def get_blue_commander_prompt(cls, scenario_context: str = "") -> str:
