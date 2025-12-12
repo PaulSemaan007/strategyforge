@@ -35,21 +35,40 @@ Architecture:
     └─────────────────┘
 """
 
+import os
 from typing import Literal
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, END
 
 from .state import GameState, format_game_state_for_agent, AgentAction
 from .prompts import AgentPrompts, format_turn_prompt
 
 
-def create_llm(model_name: str = "llama3.1:8b", temperature: float = 0.7) -> ChatOllama:
-    """Create an Ollama LLM instance."""
-    return ChatOllama(
-        model=model_name,
-        temperature=temperature,
-    )
+def create_llm(model_name: str = "llama-3.1-8b-instant", temperature: float = 0.7):
+    """
+    Create an LLM instance.
+
+    Uses Groq (free cloud API) if GROQ_API_KEY is set, otherwise falls back to Ollama (local).
+    """
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+
+    if groq_api_key:
+        # Use Groq (free cloud API)
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            model=model_name,
+            temperature=temperature,
+            api_key=groq_api_key,
+        )
+    else:
+        # Fall back to local Ollama
+        from langchain_ollama import ChatOllama
+        # Map Groq model names to Ollama equivalents
+        ollama_model = "llama3.1:8b" if "llama" in model_name.lower() else model_name
+        return ChatOllama(
+            model=ollama_model,
+            temperature=temperature,
+        )
 
 
 def blue_commander_node(state: GameState) -> dict:
